@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}Metrics{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- System Overview -->
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">System Overview</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="metric-card">
+                            <h6>CPU Load</h6>
+                            <div class="progress">
+                                <div id="cpuLoad" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                            </div>
+                            <small class="text-muted" id="cpuLoadText">0%</small>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="metric-card">
+                            <h6>Memory Usage</h6>
+                            <div class="progress">
+                                <div id="memoryUsage" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                            </div>
+                            <small class="text-muted" id="memoryUsageText">0%</small>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="metric-card">
+                            <h6>System CPU</h6>
+                            <div class="progress">
+                                <div id="systemCpu" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                            </div>
+                            <small class="text-muted" id="systemCpuText">0%</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Python GC Metrics -->
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Python GC Objects</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="gcObjectsChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Python Collections -->
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">GC Collections</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="gcCollectionsChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Process Information -->
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Process Information</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="metric-info">
+                            <h6>Virtual Memory</h6>
+                            <p id="virtualMemory">-</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="metric-info">
+                            <h6>Resident Memory</h6>
+                            <p id="residentMemory">-</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="metric-info">
+                            <h6>Open File Descriptors</h6>
+                            <p id="openFds">-</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="metric-info">
+                            <h6>CPU Time</h6>
+                            <p id="cpuTime">-</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Python Information -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Python Information</h5>
+            </div>
+            <div class="card-body">
+                <div id="pythonInfo">
+                    <!-- Python info will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

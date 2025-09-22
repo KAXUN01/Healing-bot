@@ -1,0 +1,43 @@
+.metric-card {
+    padding: 15px;
+    border-radius: 8px;
+    background-color: #f8f9fa;
+    margin-bottom: 15px;
+}
+
+.metric-card h6 {
+    margin-bottom: 10px;
+    color: #495057;
+}
+
+.progress {
+    height: 10px;
+    margin-bottom: 5px;
+}
+
+.metric-info {
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.metric-info h6 {
+    margin-bottom: 10px;
+    color: #495057;
+}
+
+.metric-info p {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 500;
+}
+
+.card {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.125);
+}
