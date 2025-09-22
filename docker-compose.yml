@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  incident-bot:
+    build:
+      context: ./incident-bot
+      dockerfile: Dockerfile
+    container_name: incident-bot
+    ports:
+      - "${BOT_PORT}:${BOT_PORT}"
+    environment:
+      - PORT=${BOT_PORT}
+      - HOST=${BOT_HOST}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - LOG_LEVEL=${LOG_LEVEL}
+    env_file:
+      - .env
+    restart: unless-stopped
+  server:
+    build:
+      context: ./monitoring/server
+      dockerfile: Dockerfile
+    container_name: server
+    ports:
+      - "${SERVER_PORT}:${SERVER_PORT}"
+    environment:
+      - PORT=${SERVER_PORT}
+      - HOST=${SERVER_HOST}
+    env_file:
+      - .env
+    restart: unless-stopped
