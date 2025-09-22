@@ -80,3 +80,4 @@
 
 
 ".env" 
+incident-bot/.env.example
