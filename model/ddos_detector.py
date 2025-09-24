@@ -1,12 +1,19 @@
 import numpy as np
 import tensorflow as tf
 import logging
+import os
 from typing import Dict, List, Any
 
 logger = logging.getLogger(__name__)
 
-# Load your Keras model
-model = tf.keras.models.load_model("ddos_model.keras")
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "ddos_model.keras")
+
+try:
+    model = tf.keras.models.load_model(MODEL_PATH)
+    logger.info("DDoS detection model loaded successfully")
+except Exception as e:
+    logger.error(f"Failed to load DDoS detection model: {str(e)}")
+    model = None
 
 # Define the exact feature order as per your training data (77 features)
 FEATURE_NAMES = [

@@ -18,19 +18,34 @@ SYSTEM_CPU_USAGE = Gauge("system_cpu_percent", "System CPU usage")
 
 def get_system_metrics():
     """Gather system metrics"""
-    cpu_percent = psutil.cpu_percent(interval=1)
-    memory_percent = psutil.virtual_memory().percent
-    disk_percent = psutil.disk_usage('/').percent
-    
-    SYSTEM_CPU_USAGE.set(cpu_percent)
-    MEMORY_USAGE.set(memory_percent)
-    CPU_LOAD.set(cpu_percent)  # Using actual CPU load
-    
-    return {
-        'cpu': cpu_percent,
-        'memory': memory_percent,
-        'disk': disk_percent
-    }
+    try:
+        cpu_percent = psutil.cpu_percent(interval=1)
+        memory = psutil.virtual_memory()
+        memory_percent = memory.percent
+        disk = psutil.disk_usage('/')
+        disk_percent = disk.percent
+        
+        SYSTEM_CPU_USAGE.set(cpu_percent)
+        MEMORY_USAGE.set(memory_percent)
+        CPU_LOAD.set(cpu_percent)
+        
+        return {
+            'cpu': cpu_percent,
+            'memory': memory_percent,
+            'disk': disk_percent,
+            'memory_available': memory.available / (1024 * 1024 * 1024),  # GB
+            'disk_free': disk.free / (1024 * 1024 * 1024)  # GB
+        }
+    except Exception as e:
+        app.logger.error(f"Error collecting system metrics: {str(e)}")
+        return {
+            'cpu': 0,
+            'memory': 0,
+            'disk': 0,
+            'memory_available': 0,
+            'disk_free': 0,
+            'error': str(e)
+        }
 
 @app.route('/')
 def index():
