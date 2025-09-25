@@ -19,6 +19,34 @@ services:
     env_file:
       - .env
     restart: unless-stopped
+    depends_on:
+      - redis
+      - elasticsearch
+
+  model:
+    build:
+      context: ./model
+      dockerfile: Dockerfile
+    container_name: ddos-model
+    ports:
+      - "${MODEL_PORT:-8080}:8080"
+    volumes:
+      - ./model/ddos_model.keras:/app/ddos_model.keras
+      - ./model/visualizations:/app/visualizations
+    environment:
+      - MODEL_PORT=${MODEL_PORT:-8080}
+      - MODEL_HOST=${MODEL_HOST:-0.0.0.0}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    env_file:
+      - .env
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+
   server:
     build:
       context: ./monitoring/server
@@ -29,6 +57,75 @@ services:
     environment:
       - PORT=${SERVER_PORT}
       - HOST=${SERVER_HOST}
+      - ELASTICSEARCH_HOST=elasticsearch
+      - REDIS_HOST=redis
     env_file:
       - .env
+    volumes:
+      - ./monitoring/server/static:/app/static
+      - ./monitoring/server/templates:/app/templates
     restart: unless-stopped
+    depends_on:
+      - elasticsearch
+      - redis
+      - model
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.10.2
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.2
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    command: redis-server --save 60 1 --loglevel warning
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: prometheus
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:10.1.2
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+      - elasticsearch
+
+volumes:
+  esdata:
+  redisdata:
+  prometheus_data:
+  grafana_data:

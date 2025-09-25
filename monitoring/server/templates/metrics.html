@@ -3,8 +3,31 @@
 {% block title %}Metrics{% endblock %}
 
 {% block content %}
+<!-- DDoS Threat Alert -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="card-title mb-0">DDoS Threat Monitor</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-12">
+                        <h6>Current Threat Level</h6>
+                        <div class="progress" style="height: 25px;">
+                            <div id="ddosThreatBar" class="progress-bar" role="progressbar" style="width: 0%">
+                                <span id="ddosThreatText" class="h6">Normal (0%)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- System Overview -->
 <div class="row">
-    <!-- System Overview -->
     <div class="col-12 mb-4">
         <div class="card">
             <div class="card-header">

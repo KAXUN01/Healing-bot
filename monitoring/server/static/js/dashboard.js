@@ -7,23 +7,65 @@ function formatBytes(bytes) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
+// Global charts
+let ddosTimelineChart = null;
+let networkTrafficChart = null;
+let connectionChart = null;
+
+// Global variables for maps and advanced charts
+let worldMap = null;
+let attackHeatmap = null;
+let trafficPatternChart = null;
+let websocket = null;
+
+// Initialize WebSocket connection
+function initializeWebSocket() {
+    websocket = new WebSocket('ws://' + window.location.host + '/ws');
+    
+    websocket.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+        updateThreatMap(data);
+        updateAttackPatterns(data);
+        if (data.pattern_detected) {
+            showAlert(data);
+        }
+    };
+
+    websocket.onclose = function() {
+        setTimeout(initializeWebSocket, 5000); // Reconnect after 5 seconds
+    };
+}
+
 // Function to update the dashboard
 function updateDashboard() {
-    fetch('/metrics')
-        .then(response => response.text())
-        .then(data => {
-            const metrics = {};
-            data.split('\n').forEach(line => {
-                if (!line.startsWith('#') && line.trim()) {
-                    const [key, value] = line.split(' ');
-                    metrics[key] = parseFloat(value);
-                }
-            });
+    Promise.all([
+        fetch('/metrics').then(response => response.text()),
+        fetch('/api/metrics_history').then(response => response.json()),
+        fetch('/api/active-threats').then(response => response.json())
+    ]).then(([metricsData, historyData, threatsData]) => {
+        const metrics = {};
+        metricsData.split('\n').forEach(line => {
+            if (!line.startsWith('#') && line.trim()) {
+                const [key, value] = line.split(' ');
+                metrics[key] = parseFloat(value);
+            }
+        });
+        
+        // Update threat summary
+        updateThreatSummary(threatsData.threats);
 
-            // Update System Overview
-            updateProgressBar('cpuLoad', metrics['cpu_load_simulation'] || 0);
-            updateProgressBar('memoryUsage', metrics['memory_usage_percent'] || 0);
-            updateProgressBar('systemCpu', metrics['system_cpu_percent'] || 0);
+        // Update System Overview
+        updateProgressBar('cpuLoad', metrics['cpu_load_simulation'] || 0);
+        updateProgressBar('memoryUsage', metrics['memory_usage_percent'] || 0);
+        updateProgressBar('systemCpu', metrics['system_cpu_percent'] || 0);
+        
+        // Update DDoS Threat Level
+        updateDDoSThreatLevel(metrics['ddos_probability'] || 0);
+        
+        // Update timeline charts
+        updateDDoSTimelineChart(historyData);
+        updateNetworkTrafficChart(historyData);
+        updateConnectionChart(historyData);
 
             // Update Process Information
             document.getElementById('virtualMemory').textContent = formatBytes(metrics['process_virtual_memory_bytes'] || 0);
@@ -159,8 +201,237 @@ function updatePythonInfo(metrics) {
     `;
 }
 
-// Update the dashboard every 5 seconds
+function updateDDoSThreatLevel(probability) {
+    const threatLevel = document.getElementById('ddosThreatLevel');
+    const threatBar = document.getElementById('ddosThreatBar');
+    const percentage = probability * 100;
+
+    threatBar.style.width = `${percentage}%`;
+    threatBar.className = `progress-bar ${percentage > 80 ? 'bg-danger' : percentage > 50 ? 'bg-warning' : 'bg-success'}`;
+    
+    // Update threat level text
+    let threatText = percentage > 80 ? 'Critical' : percentage > 50 ? 'Warning' : 'Normal';
+    document.getElementById('ddosThreatText').textContent = `${threatText} (${percentage.toFixed(1)}%)`;
+}
+
+function updateDDoSTimelineChart(data) {
+    const ctx = document.getElementById('ddosTimelineChart');
+    const chartData = {
+        labels: data.timestamps,
+        datasets: [{
+            label: 'DDoS Probability',
+            data: data.ddos_prob,
+            borderColor: 'rgb(255, 99, 132)',
+            backgroundColor: 'rgba(255, 99, 132, 0.5)',
+            fill: true
+        }]
+    };
+
+    if (!ddosTimelineChart) {
+        ddosTimelineChart = new Chart(ctx, {
+            type: 'line',
+            data: chartData,
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 1
+                    }
+                },
+                animation: false
+            }
+        });
+    } else {
+        ddosTimelineChart.data = chartData;
+        ddosTimelineChart.update('none');
+    }
+}
+
+function updateNetworkTrafficChart(data) {
+    const ctx = document.getElementById('networkTrafficChart');
+    const chartData = {
+        labels: data.timestamps,
+        datasets: [{
+            label: 'Network In (bytes)',
+            data: data.network_in,
+            borderColor: 'rgb(75, 192, 192)',
+            backgroundColor: 'rgba(75, 192, 192, 0.5)'
+        }, {
+            label: 'Network Out (bytes)',
+            data: data.network_out,
+            borderColor: 'rgb(153, 102, 255)',
+            backgroundColor: 'rgba(153, 102, 255, 0.5)'
+        }]
+    };
+
+    if (!networkTrafficChart) {
+        networkTrafficChart = new Chart(ctx, {
+            type: 'line',
+            data: chartData,
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                },
+                animation: false
+            }
+        });
+    } else {
+        networkTrafficChart.data = chartData;
+        networkTrafficChart.update('none');
+    }
+}
+
+function updateConnectionChart(data) {
+    const ctx = document.getElementById('connectionChart');
+    const chartData = {
+        labels: data.timestamps,
+        datasets: [{
+            label: 'Active Connections',
+            data: data.connections,
+            borderColor: 'rgb(255, 159, 64)',
+            backgroundColor: 'rgba(255, 159, 64, 0.5)',
+            fill: true
+        }]
+    };
+
+    if (!connectionChart) {
+        connectionChart = new Chart(ctx, {
+            type: 'line',
+            data: chartData,
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                },
+                animation: false
+            }
+        });
+    } else {
+        connectionChart.data = chartData;
+        connectionChart.update('none');
+    }
+}
+
+function updateThreatMap(data) {
+    if (!worldMap) {
+        worldMap = L.map('worldMap').setView([0, 0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(worldMap);
+    }
+
+    if (data.location) {
+        const { latitude, longitude, country } = data.location;
+        const color = data.pattern_detected ? 'red' : 'blue';
+        
+        L.circleMarker([latitude, longitude], {
+            color: color,
+            fillColor: color,
+            fillOpacity: 0.5,
+            radius: 8
+        }).addTo(worldMap)
+        .bindPopup(`
+            <b>${country}</b><br>
+            IP: ${data.ip}<br>
+            ${data.pattern_detected ? `Attack Type: ${data.attack_type}<br>
+            Confidence: ${(data.confidence * 100).toFixed(1)}%` : 'Normal Traffic'}
+        `);
+    }
+}
+
+function updateAttackPatterns(data) {
+    if (!attackHeatmap) {
+        const ctx = document.getElementById('attackHeatmap');
+        attackHeatmap = new Chart(ctx, {
+            type: 'heatmap',
+            data: {
+                datasets: [{
+                    data: [],
+                    backgroundColor: 'rgba(255, 99, 132, 0.5)'
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        type: 'time',
+                        time: {
+                            unit: 'hour'
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    if (data.pattern_detected) {
+        attackHeatmap.data.datasets[0].data.push({
+            x: data.attack_type,
+            y: new Date(),
+            v: data.confidence
+        });
+        attackHeatmap.update('none');
+    }
+}
+
+function showAlert(data) {
+    const alertsContainer = document.getElementById('alertsContainer');
+    const alert = document.createElement('div');
+    alert.className = `alert alert-${data.confidence > 0.8 ? 'danger' : 'warning'} alert-dismissible fade show`;
+    alert.innerHTML = `
+        <strong>${data.attack_type} Detected!</strong><br>
+        IP: ${data.ip}<br>
+        Location: ${data.location.country}<br>
+        Confidence: ${(data.confidence * 100).toFixed(1)}%
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    alertsContainer.prepend(alert);
+
+    // Remove alert after 10 seconds
+    setTimeout(() => alert.remove(), 10000);
+}
+
+function updateThreatSummary(threats) {
+    const summaryElement = document.getElementById('threatSummary');
+    const activeThreats = threats.length;
+    const criticalThreats = threats.filter(t => t.confidence > 0.8).length;
+    
+    summaryElement.innerHTML = `
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card bg-warning text-white">
+                    <div class="card-body">
+                        <h5>Active Threats</h5>
+                        <h2>${activeThreats}</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card bg-danger text-white">
+                    <div class="card-body">
+                        <h5>Critical Threats</h5>
+                        <h2>${criticalThreats}</h2>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Initialize everything when the document loads
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Leaflet map
+    worldMap = L.map('worldMap').setView([0, 0], 2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(worldMap);
+
+    // Initialize WebSocket connection
+    initializeWebSocket();
+
+    // Start regular dashboard updates
     updateDashboard();
     setInterval(updateDashboard, 5000);
 });

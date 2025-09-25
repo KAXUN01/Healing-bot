@@ -1,11 +1,16 @@
-from flask import Flask, render_template, Response
+from flask import Flask, render_template, Response, jsonify
 import time
 import threading
 import psutil
 import platform
+import requests
 from datetime import datetime
 from prometheus_client import Counter, generate_latest, Gauge, CONTENT_TYPE_LATEST
 from flask_bootstrap import Bootstrap5
+import numpy as np
+from collections import deque
+import json
+import os
 
 app = Flask(__name__)
 bootstrap = Bootstrap5(app)
@@ -15,6 +20,22 @@ REQUEST_COUNT = Counter("request_count", "Total number of requests", ['endpoint'
 CPU_LOAD = Gauge("cpu_load_simulation", "Simulated CPU Load")
 MEMORY_USAGE = Gauge("memory_usage_percent", "System memory usage")
 SYSTEM_CPU_USAGE = Gauge("system_cpu_percent", "System CPU usage")
+NETWORK_IN = Gauge("network_in_bytes", "Network incoming bytes")
+NETWORK_OUT = Gauge("network_out_bytes", "Network outgoing bytes")
+CONNECTIONS = Gauge("active_connections", "Number of active connections")
+DDOS_PROBABILITY = Gauge("ddos_probability", "DDoS attack probability")
+
+# Store historical data for graphs
+MAX_HISTORY = 100
+metrics_history = {
+    'timestamps': deque(maxlen=MAX_HISTORY),
+    'cpu': deque(maxlen=MAX_HISTORY),
+    'memory': deque(maxlen=MAX_HISTORY),
+    'network_in': deque(maxlen=MAX_HISTORY),
+    'network_out': deque(maxlen=MAX_HISTORY),
+    'connections': deque(maxlen=MAX_HISTORY),
+    'ddos_prob': deque(maxlen=MAX_HISTORY)
+}
 
 def get_system_metrics():
     """Gather system metrics"""
