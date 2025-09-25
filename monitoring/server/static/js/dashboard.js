@@ -40,9 +40,8 @@ function initializeWebSocket() {
 function updateDashboard() {
     Promise.all([
         fetch('/metrics').then(response => response.text()),
-        fetch('/api/metrics_history').then(response => response.json()),
-        fetch('/api/active-threats').then(response => response.json())
-    ]).then(([metricsData, historyData, threatsData]) => {
+        fetch('/api/metrics_history').then(response => response.json())
+    ]).then(([metricsData, historyData]) => {
         const metrics = {};
         metricsData.split('\n').forEach(line => {
             if (!line.startsWith('#') && line.trim()) {
@@ -50,9 +49,29 @@ function updateDashboard() {
                 metrics[key] = parseFloat(value);
             }
         });
-        
-        // Update threat summary
-        updateThreatSummary(threatsData.threats);
+
+        // Update System Overview
+        updateProgressBar('cpuLoad', metrics['cpu_load_simulation'] || 0);
+        updateProgressBar('memoryUsage', metrics['memory_usage_percent'] || 0);
+        updateProgressBar('systemCpu', metrics['system_cpu_percent'] || 0);
+
+        // Update Memory Info
+        document.getElementById('virtualMemory').textContent = formatBytes(metrics['process_virtual_memory_bytes'] || 0);
+        document.getElementById('residentMemory').textContent = formatBytes(metrics['process_resident_memory_bytes'] || 0);
+        document.getElementById('openFds').textContent = metrics['process_open_fds'] || 0;
+        document.getElementById('cpuTime').textContent = (metrics['process_cpu_seconds_total'] || 0).toFixed(2) + ' seconds';
+
+        // Update Network Stats
+        document.getElementById('networkIn').textContent = formatBytes(metrics['network_in_bytes'] || 0);
+        document.getElementById('networkOut').textContent = formatBytes(metrics['network_out_bytes'] || 0);
+        document.getElementById('connections').textContent = metrics['active_connections'] || 0;
+
+        // Update charts with historical data
+        updateCharts(historyData);
+
+        // Update last update time
+        document.getElementById('lastUpdateTime').textContent = 
+            'Last Updated: ' + new Date().toLocaleTimeString();
 
         // Update System Overview
         updateProgressBar('cpuLoad', metrics['cpu_load_simulation'] || 0);

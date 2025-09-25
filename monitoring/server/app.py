@@ -37,17 +37,41 @@ metrics_history = {
     'ddos_prob': deque(maxlen=MAX_HISTORY)
 }
 
+def get_network_stats():
+    """Get network statistics"""
+    net_io = psutil.net_io_counters()
+    connections = len(psutil.net_connections())
+    return net_io.bytes_recv, net_io.bytes_sent, connections
+
 def get_system_metrics():
     """Gather system metrics"""
     try:
+        # Basic system metrics
         cpu_percent = psutil.cpu_percent(interval=1)
         memory = psutil.virtual_memory()
         memory_percent = memory.percent
         disk = psutil.disk_usage('/')
         disk_percent = disk.percent
         
+        # Network metrics
+        net_in, net_out, conn_count = get_network_stats()
+        
+        # Update Prometheus metrics
         SYSTEM_CPU_USAGE.set(cpu_percent)
         MEMORY_USAGE.set(memory_percent)
+        CPU_LOAD.set(cpu_percent)
+        NETWORK_IN.set(net_in)
+        NETWORK_OUT.set(net_out)
+        CONNECTIONS.set(conn_count)
+        
+        # Update historical data
+        current_time = datetime.now().strftime('%H:%M:%S')
+        metrics_history['timestamps'].append(current_time)
+        metrics_history['cpu'].append(cpu_percent)
+        metrics_history['memory'].append(memory_percent)
+        metrics_history['network_in'].append(net_in)
+        metrics_history['network_out'].append(net_out)
+        metrics_history['connections'].append(conn_count)
         CPU_LOAD.set(cpu_percent)
         
         return {
