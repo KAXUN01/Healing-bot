@@ -3,9 +3,18 @@
 {% block title %}Metrics{% endblock %}
 
 {% block content %}
-<!-- DDoS Threat Alert -->
+<!-- Threat Summary -->
 <div class="row mb-4">
     <div class="col-12">
+        <div id="threatSummary">
+            <!-- Threat summary will be populated by JavaScript -->
+        </div>
+    </div>
+</div>
+
+<!-- DDoS Threat Alert & Map -->
+<div class="row mb-4">
+    <div class="col-md-6">
         <div class="card">
             <div class="card-header bg-primary text-white">
                 <h5 class="card-title mb-0">DDoS Threat Monitor</h5>
@@ -20,6 +29,42 @@
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Attack Origin Map</h5>
+            </div>
+            <div class="card-body">
+                <div id="worldMap" style="height: 300px;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Attack Pattern Analysis -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Attack Patterns (24h)</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="attackHeatmap"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Active Threats</h5>
+            </div>
+            <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                <div id="activeThreats">
+                    <!-- Active threats will be populated by JavaScript -->
                 </div>
             </div>
         </div>
@@ -67,26 +112,68 @@
         </div>
     </div>
 
-    <!-- Python GC Metrics -->
+    <!-- System Charts -->
     <div class="col-md-6 mb-4">
         <div class="card">
             <div class="card-header">
-                <h5 class="card-title mb-0">Python GC Objects</h5>
+                <h5 class="card-title mb-0">CPU Usage History</h5>
             </div>
             <div class="card-body">
-                <canvas id="gcObjectsChart"></canvas>
+                <canvas id="cpuChart"></canvas>
             </div>
         </div>
     </div>
 
-    <!-- Python Collections -->
     <div class="col-md-6 mb-4">
         <div class="card">
             <div class="card-header">
-                <h5 class="card-title mb-0">GC Collections</h5>
+                <h5 class="card-title mb-0">Memory Usage History</h5>
             </div>
             <div class="card-body">
-                <canvas id="gcCollectionsChart"></canvas>
+                <canvas id="memoryChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Network Charts -->
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Network Traffic</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="networkChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Network Stats -->
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Network Statistics</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="metric-info">
+                            <h6>Network In</h6>
+                            <p id="networkIn">-</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="metric-info">
+                            <h6>Network Out</h6>
+                            <p id="networkOut">-</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="metric-info">
+                            <h6>Active Connections</h6>
+                            <p id="connections">-</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

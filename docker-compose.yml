@@ -1,5 +1,15 @@
 version: '3.8'
 
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+networks:
+  healing-network:
+    driver: bridge
+
 services:
   incident-bot:
     build:
@@ -7,21 +17,35 @@ services:
       dockerfile: Dockerfile
     container_name: incident-bot
     ports:
-      - "${BOT_PORT}:${BOT_PORT}"
+      - "${BOT_PORT:-8000}:${BOT_PORT:-8000}"
     environment:
-      - PORT=${BOT_PORT}
-      - HOST=${BOT_HOST}
+      - PORT=${BOT_PORT:-8000}
+      - HOST=${BOT_HOST:-0.0.0.0}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_REGION=${AWS_REGION}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - LOG_LEVEL=${LOG_LEVEL}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - REDIS_HOST=redis
+      - ELASTICSEARCH_HOST=elasticsearch
+      - MODEL_HOST=model
     env_file:
       - .env
+    networks:
+      - healing-network
     restart: unless-stopped
     depends_on:
-      - redis
-      - elasticsearch
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${BOT_PORT:-8000}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging: *default-logging
 
   model:
     build:
@@ -31,44 +55,80 @@ services:
     ports:
       - "${MODEL_PORT:-8080}:8080"
     volumes:
-      - ./model/ddos_model.keras:/app/ddos_model.keras
+      - ./model/ddos_model.keras:/app/ddos_model.keras:ro
       - ./model/visualizations:/app/visualizations
+      - model-cache:/app/cache
     environment:
       - MODEL_PORT=${MODEL_PORT:-8080}
       - MODEL_HOST=${MODEL_HOST:-0.0.0.0}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - REDIS_HOST=redis
+      - TENSORFLOW_CACHE=/app/cache
+      - PROMETHEUS_MULTIPROC_DIR=/tmp
     env_file:
       - .env
+    networks:
+      - healing-network
     restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
     deploy:
       resources:
         limits:
           memory: 4G
+          cpus: '2'
         reservations:
           memory: 2G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${MODEL_PORT:-8080}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging: *default-logging
 
   server:
     build:
       context: ./monitoring/server
       dockerfile: Dockerfile
-    container_name: server
+    container_name: monitoring-server
     ports:
-      - "${SERVER_PORT}:${SERVER_PORT}"
+      - "${SERVER_PORT:-5000}:${SERVER_PORT:-5000}"
     environment:
-      - PORT=${SERVER_PORT}
-      - HOST=${SERVER_HOST}
+      - PORT=${SERVER_PORT:-5000}
+      - HOST=${SERVER_HOST:-0.0.0.0}
       - ELASTICSEARCH_HOST=elasticsearch
       - REDIS_HOST=redis
+      - MODEL_HOST=model
+      - MODEL_PORT=${MODEL_PORT:-8080}
+      - PROMETHEUS_MULTIPROC_DIR=/tmp
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - TZ=UTC
     env_file:
       - .env
     volumes:
-      - ./monitoring/server/static:/app/static
-      - ./monitoring/server/templates:/app/templates
+      - ./monitoring/server/static:/app/static:ro
+      - ./monitoring/server/templates:/app/templates:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     restart: unless-stopped
     depends_on:
-      - elasticsearch
-      - redis
-      - model
+      elasticsearch:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      model:
+        condition: service_healthy
+    networks:
+      - healing-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${SERVER_PORT:-5000}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging: *default-logging
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.10.2
@@ -77,11 +137,24 @@ services:
       - discovery.type=single-node
       - xpack.security.enabled=false
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - bootstrap.memory_lock=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
     ports:
       - "9200:9200"
     volumes:
       - esdata:/usr/share/elasticsearch/data
+    networks:
+      - healing-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q 'status.*green\\|status.*yellow'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging: *default-logging
 
   redis:
     image: redis:7.2
@@ -90,42 +163,77 @@ services:
       - "6379:6379"
     volumes:
       - redisdata:/data
-    command: redis-server --save 60 1 --loglevel warning
+    command: redis-server --save 60 1 --loglevel warning --maxmemory 512mb --maxmemory-policy allkeys-lru
+    networks:
+      - healing-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
 
   prometheus:
     image: prom/prometheus:v2.47.0
     container_name: prometheus
-    volumes:
-      - ./monitoring/prometheus:/etc/prometheus
-      - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus:ro
+      - prometheus_data:/prometheus
     ports:
       - "9090:9090"
+    networks:
+      - healing-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging: *default-logging
 
   grafana:
     image: grafana/grafana:10.1.2
     container_name: grafana
     ports:
       - "3000:3000"
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
       - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel,grafana-worldmap-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - healing-network
     restart: unless-stopped
     depends_on:
-      - prometheus
-      - elasticsearch
+      prometheus:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging: *default-logging
 
 volumes:
   esdata:
+    driver: local
   redisdata:
+    driver: local
   prometheus_data:
+    driver: local
   grafana_data:
+    driver: local
+  model-cache:
+    driver: local
