@@ -51,6 +51,15 @@ services:
     build:
       context: ./model
       dockerfile: Dockerfile
+      args:
+        DOCKER_BUILDKIT: 1
+      x-bake:
+        platforms:
+          - linux/amd64
+        cache-from:
+          - type=local,src=/tmp/.buildx-cache
+        cache-to:
+          - type=local,dest=/tmp/.buildx-cache-new,mode=max
     container_name: ddos-model
     ports:
       - "${MODEL_PORT:-8080}:8080"
