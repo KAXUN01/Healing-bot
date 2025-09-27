@@ -1,0 +1,78 @@
+FROM ubuntu:22.04
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PIP_NO_CACHE_DIR=1
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-venv \
+    iptables \
+    ufw \
+    net-tools \
+    curl \
+    wget \
+    build-essential \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app directory
+WORKDIR /app
+
+# Copy requirements first for better caching
+COPY requirements-ubuntu.txt .
+
+# Install Python dependencies
+RUN pip3 install --no-cache-dir -r requirements-ubuntu.txt
+
+# Copy application files
+COPY ubuntu_ddos_detector.py .
+COPY web_dashboard.py .
+COPY ddos_model_retrained.keras .
+COPY test_ubuntu_system.py .
+
+# Create directories for logs and data
+RUN mkdir -p /var/log/ddos-detection \
+    && mkdir -p /opt/ddos-detection
+
+# Copy model file to expected location
+RUN cp ddos_model_retrained.keras /opt/ddos-detection/
+
+# Set permissions
+RUN chmod +x *.py
+
+# Create startup script
+RUN echo '#!/bin/bash\n\
+echo "🛡️ Starting Ubuntu DDoS Detection System"\n\
+echo "======================================"\n\
+\n\
+# Start the web dashboard in background\n\
+python3 web_dashboard.py &\n\
+WEB_PID=$!\n\
+\n\
+# Start the detection engine\n\
+python3 ubuntu_ddos_detector.py &\n\
+DETECTOR_PID=$!\n\
+\n\
+echo "✅ DDoS Detection System started"\n\
+echo "🌐 Web Dashboard: http://localhost:5000"\n\
+echo "📊 Monitor logs: tail -f /var/log/ddos-detection/ddos_detection.log"\n\
+\n\
+# Wait for processes\n\
+wait $WEB_PID $DETECTOR_PID\n\
+' > /app/start.sh && chmod +x /app/start.sh
+
+# Expose web dashboard port
+EXPOSE 5000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:5000/api/status || exit 1
+
+# Run the startup script
+CMD ["/app/start.sh"]

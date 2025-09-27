@@ -1,23 +1,203 @@
 version: '3.8'
 
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+networks:
+  ddos-network:
+    driver: bridge
+
 services:
+  # Ubuntu DDoS Detection System with Web Dashboard
+  ddos-detection:
+    build:
+      context: .
+      dockerfile: Dockerfile.ubuntu
+    container_name: ddos-detection-system
+    ports:
+      - "${DASHBOARD_PORT:-5000}:5000"
+    volumes:
+      - ddos-logs:/var/log/ddos-detection
+      - ddos-data:/opt/ddos-detection
+    environment:
+      - DASHBOARD_PORT=${DASHBOARD_PORT:-5000}
+      - DETECTION_THRESHOLD=${DETECTION_THRESHOLD:-0.7}
+      - BLOCK_DURATION=${BLOCK_DURATION:-3600}
+      - MAX_ATTACKS_PER_IP=${MAX_ATTACKS_PER_IP:-3}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    networks:
+      - ddos-network
+    restart: unless-stopped
+    privileged: true  # Required for iptables/UFW
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging: *default-logging
+
+  # Original DDoS Model API (for backward compatibility)
   ddos-model:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ddos-model
+    container_name: ddos-model-api
     ports:
       - "${MODEL_PORT:-8080}:8080"
     volumes:
-      - ./ddos_model.keras:/app/ddos_model.keras
+      - ./ddos_model.keras:/app/ddos_model.keras:ro
+      - model-visualizations:/app/visualizations
     environment:
       - MODEL_PORT=${MODEL_PORT:-8080}
       - MODEL_HOST=${MODEL_HOST:-0.0.0.0}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    networks:
+      - ddos-network
     restart: unless-stopped
+    depends_on:
+      - ddos-detection
     deploy:
       resources:
         limits:
-          memory: 4G  # Adjust based on your model size
+          memory: 1G
+          cpus: '0.5'
         reservations:
-          memory: 2G
+          memory: 256M
+          cpus: '0.25'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging: *default-logging
+
+  # Nginx reverse proxy for web dashboard
+  nginx:
+    image: nginx:alpine
+    container_name: ddos-nginx
+    ports:
+      - "${NGINX_PORT:-80}:80"
+      - "${NGINX_SSL_PORT:-443}:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - nginx-logs:/var/log/nginx
+    environment:
+      - NGINX_PORT=${NGINX_PORT:-80}
+      - NGINX_SSL_PORT=${NGINX_SSL_PORT:-443}
+    networks:
+      - ddos-network
+    restart: unless-stopped
+    depends_on:
+      - ddos-detection
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging: *default-logging
+
+  # Redis for caching and session management
+  redis:
+    image: redis:7.2-alpine
+    container_name: ddos-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+    networks:
+      - ddos-network
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
+
+  # Prometheus for monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ddos-prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    environment:
+      - PROMETHEUS_PORT=${PROMETHEUS_PORT:-9090}
+    networks:
+      - ddos-network
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging: *default-logging
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ddos-grafana
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel,grafana-worldmap-panel
+    networks:
+      - ddos-network
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging: *default-logging
+
+volumes:
+  ddos-logs:
+    driver: local
+  ddos-data:
+    driver: local
+  model-visualizations:
+    driver: local
+  nginx-logs:
+    driver: local
+  redis-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
