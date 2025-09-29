@@ -14,8 +14,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies (simple)
-COPY requirements-simple.txt requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements-simple.txt .
+RUN pip install --no-cache-dir -r requirements-simple.txt
 
 # Copy application files
 COPY main.py .
