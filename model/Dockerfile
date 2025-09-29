@@ -8,17 +8,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies (minimal)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    g++ \
-    iptables \
-    net-tools \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-COPY requirements.txt .
+# Install Python dependencies (lightweight)
+COPY requirements-lightweight.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application files

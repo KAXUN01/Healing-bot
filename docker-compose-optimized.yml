@@ -1,0 +1,80 @@
+version: '3.8'
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+networks:
+  healing-network:
+    driver: bridge
+
+services:
+  # Core ML Model API - Port 8080
+  model:
+    build:
+      context: ./model
+      dockerfile: Dockerfile
+      args:
+        DOCKER_BUILDKIT: 1
+    container_name: ddos-model
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./model/ddos_model.keras:/app/ddos_model.keras:ro
+      - ./model/visualizations:/app/visualizations
+      - model-cache:/app/cache
+    environment:
+      - MODEL_PORT=8080
+      - MODEL_HOST=0.0.0.0
+      - LOG_LEVEL=INFO
+      - TENSORFLOW_CACHE=/app/cache
+    networks:
+      - healing-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging: *default-logging
+
+  # Lightweight Web Dashboard - Port 9090
+  dashboard:
+    build:
+      context: ./model
+      dockerfile: Dockerfile.dashboard
+    container_name: ddos-dashboard
+    ports:
+      - "9090:9090"
+    environment:
+      - DASHBOARD_PORT=9090
+      - MODEL_HOST=model
+      - MODEL_PORT=8080
+      - LOG_LEVEL=INFO
+    networks:
+      - healing-network
+    restart: unless-stopped
+    depends_on:
+      model:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging: *default-logging
+
+volumes:
+  model-cache:
+    driver: local
