@@ -15,8 +15,9 @@ COPY requirements-simple.txt .
 RUN pip install --no-cache-dir -r requirements-simple.txt
 
 # Copy dashboard files
-COPY web_dashboard_lightweight.py web_dashboard.py .
+COPY web_dashboard_lightweight.py .
 COPY lightweight_monitor.py .
+RUN cp web_dashboard_lightweight.py web_dashboard.py
 
 # Create necessary directories
 RUN mkdir -p /app/logs /app/data
