@@ -141,3 +141,9 @@ async def test_model():
         "prediction": result['prediction'],
         "risk_level": result['analysis']['risk_level']
     }
+
+if __name__ == "__main__":
+    import uvicorn
+    import os
+    port = int(os.getenv("MODEL_PORT", 8080))
+    uvicorn.run(app, host="0.0.0.0", port=port)
