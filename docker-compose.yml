@@ -154,6 +154,29 @@ services:
       retries: 3
     logging: *default-logging
 
+  network-analyzer:
+    build:
+      context: ./monitoring/server
+      dockerfile: Dockerfile
+    container_name: network-analyzer
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - HOST=0.0.0.0
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./monitoring/server/blocked_ips.db:/app/blocked_ips.db
+    networks:
+      - healing-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/active-threats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging: *default-logging
+
   dashboard:
     build:
       context: ./monitoring/dashboard
@@ -165,12 +188,15 @@ services:
       - DASHBOARD_PORT=3001
       - MODEL_HOST=model
       - MODEL_PORT=8080
+      - NETWORK_ANALYZER_HOST=network-analyzer
+      - NETWORK_ANALYZER_PORT=8000
       - LOG_LEVEL=INFO
     networks:
       - healing-network
     restart: unless-stopped
     depends_on:
       - model
+      - network-analyzer
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
       interval: 30s

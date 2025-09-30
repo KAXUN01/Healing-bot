@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request
 from ddos_detector import predict_ddos
 import logging
+import requests
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -39,6 +40,38 @@ async def process_alert(request: Request):
             'risk_level': result['analysis']['risk_level'],
             'timestamp': result['timestamp']
         }
+        
+        # Auto-block IP if threat level is high
+        if result['is_ddos'] and result['prediction'] >= 0.8:
+            try:
+                # Extract IP from alert (assuming it's in the alert data)
+                source_ip = alert_json.get('source_ip', alert_json.get('ip', 'unknown'))
+                if source_ip != 'unknown':
+                    # Call network analyzer to block the IP
+                    block_data = {
+                        'ip': source_ip,
+                        'reason': f"High DDoS threat level ({result['prediction']:.2f})",
+                        'threat_level': result['prediction'],
+                        'attack_type': 'DDoS Attack'
+                    }
+                    
+                    # Try to block IP via network analyzer
+                    try:
+                        response = requests.post(
+                            "http://network-analyzer:8000/block-ip",
+                            json=block_data,
+                            timeout=5
+                        )
+                        if response.status_code == 200:
+                            logger.warning(f"Auto-blocked IP {source_ip} due to high DDoS threat level: {result['prediction']:.2f}")
+                            alert_json['ddos_detection']['auto_blocked'] = True
+                        else:
+                            logger.error(f"Failed to auto-block IP {source_ip}: {response.text}")
+                    except requests.exceptions.RequestException as e:
+                        logger.error(f"Error calling network analyzer to block IP: {e}")
+                        
+            except Exception as e:
+                logger.error(f"Error in auto-blocking logic: {e}")
         
         logger.info(f"DDoS detection result: {result['is_ddos']} (confidence: {result['confidence']:.3f})")
         

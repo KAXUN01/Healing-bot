@@ -60,6 +60,17 @@ attack_stats = {
     'hourly_attacks': defaultdict(int)
 }
 
+# IP blocking statistics
+blocking_stats = {
+    'total_blocked': 0,
+    'currently_blocked': 0,
+    'auto_blocked': 0,
+    'manual_blocked': 0,
+    'unblocked': 0,
+    'recent_blocks_24h': 0,
+    'blocking_rate': 0.0
+}
+
 class MLModelMonitor:
     """Monitor ML model performance and collect metrics"""
     
@@ -143,6 +154,41 @@ class MLModelMonitor:
             'hourly_attacks': dict(attack_stats['hourly_attacks']),
             'detection_rate': attack_stats['total_detections'] / max(1, self.prediction_count) * 100
         }
+    
+    async def get_blocking_statistics(self) -> Dict[str, Any]:
+        """Get IP blocking statistics from network analyzer"""
+        try:
+            # Try to get real data from network analyzer
+            response = requests.get("http://network-analyzer:8000/blocked-ips/stats", timeout=5)
+            if response.status_code == 200:
+                return response.json().get('statistics', {})
+        except Exception as e:
+            logger.warning(f"Could not fetch real blocking stats: {e}")
+        
+        # Fallback to simulated data
+        return {
+            'total_blocked': blocking_stats['total_blocked'],
+            'currently_blocked': blocking_stats['currently_blocked'],
+            'auto_blocked': blocking_stats['auto_blocked'],
+            'manual_blocked': blocking_stats['manual_blocked'],
+            'unblocked': blocking_stats['unblocked'],
+            'recent_blocks_24h': blocking_stats['recent_blocks_24h'],
+            'blocking_rate': blocking_stats['blocking_rate'],
+            'attack_types': {},
+            'threat_levels': {}
+        }
+    
+    async def get_blocked_ips(self) -> List[Dict[str, Any]]:
+        """Get list of blocked IPs from network analyzer"""
+        try:
+            response = requests.get("http://network-analyzer:8000/blocked-ips", timeout=5)
+            if response.status_code == 200:
+                return response.json().get('blocked_ips', [])
+        except Exception as e:
+            logger.warning(f"Could not fetch blocked IPs: {e}")
+        
+        # Fallback to empty list
+        return []
 
 # Initialize monitor
 ml_monitor = MLModelMonitor()
@@ -212,6 +258,8 @@ async def update_metrics():
             # Collect ML model metrics
             ml_metrics = await ml_monitor.simulate_model_metrics()
             attack_stats_data = await ml_monitor.get_attack_statistics()
+            blocking_stats_data = await ml_monitor.get_blocking_statistics()
+            blocked_ips_data = await ml_monitor.get_blocked_ips()
             system_metrics = await collect_system_metrics()
             
             # Update history
@@ -236,6 +284,8 @@ async def update_metrics():
                 'timestamp': current_time.isoformat(),
                 'ml_metrics': ml_metrics,
                 'attack_statistics': attack_stats_data,
+                'blocking_statistics': blocking_stats_data,
+                'blocked_ips': blocked_ips_data,
                 'system_metrics': system_metrics,
                 'ml_history': {
                     'timestamps': list(ml_metrics_history['timestamps']),
@@ -336,6 +386,42 @@ async def get_system_history():
         'network_in': list(system_metrics_history['network_in']),
         'network_out': list(system_metrics_history['network_out'])
     }
+
+@app.get("/api/blocking/stats")
+async def get_blocking_stats():
+    """Get IP blocking statistics"""
+    return await ml_monitor.get_blocking_statistics()
+
+@app.get("/api/blocking/ips")
+async def get_blocked_ips_list():
+    """Get list of blocked IPs"""
+    return await ml_monitor.get_blocked_ips()
+
+@app.post("/api/blocking/block")
+async def block_ip(request: dict):
+    """Block an IP address"""
+    try:
+        response = requests.post(
+            "http://network-analyzer:8000/block-ip",
+            json=request,
+            timeout=10
+        )
+        return response.json()
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/blocking/unblock")
+async def unblock_ip(request: dict):
+    """Unblock an IP address"""
+    try:
+        response = requests.post(
+            "http://network-analyzer:8000/unblock-ip",
+            json=request,
+            timeout=10
+        )
+        return response.json()
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 if __name__ == "__main__":
     import uvicorn

@@ -675,6 +675,167 @@
             </div>
         </div>
 
+        <!-- IP Blocking Statistics -->
+        <div class="metrics-grid">
+            <div class="metric-card danger">
+                <div class="metric-header">
+                    <div class="metric-title">Total Blocked IPs</div>
+                    <div class="metric-icon danger">
+                        <i class="fas fa-ban"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="totalBlockedIps">0</div>
+                <div class="metric-change positive" id="blockedIpsChange">
+                    <i class="fas fa-shield-alt"></i> Active protection
+                </div>
+            </div>
+
+            <div class="metric-card warning">
+                <div class="metric-header">
+                    <div class="metric-title">Auto-Blocked</div>
+                    <div class="metric-icon warning">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="autoBlockedIps">0</div>
+                <div class="metric-change positive" id="autoBlockedChange">
+                    <i class="fas fa-cog"></i> Automated response
+                </div>
+            </div>
+
+            <div class="metric-card info">
+                <div class="metric-header">
+                    <div class="metric-title">Manual Blocks</div>
+                    <div class="metric-icon info">
+                        <i class="fas fa-user-shield"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="manualBlockedIps">0</div>
+                <div class="metric-change neutral" id="manualBlockedChange">
+                    <i class="fas fa-hand-paper"></i> Admin actions
+                </div>
+            </div>
+
+            <div class="metric-card success">
+                <div class="metric-header">
+                    <div class="metric-title">Unblocked</div>
+                    <div class="metric-icon success">
+                        <i class="fas fa-unlock"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="unblockedIps">0</div>
+                <div class="metric-change positive" id="unblockedChange">
+                    <i class="fas fa-check"></i> Restored access
+                </div>
+            </div>
+
+            <div class="metric-card primary">
+                <div class="metric-header">
+                    <div class="metric-title">Blocking Rate</div>
+                    <div class="metric-icon primary">
+                        <i class="fas fa-percentage"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="blockingRate">0%</div>
+                <div class="metric-change positive" id="blockingRateChange">
+                    <i class="fas fa-chart-line"></i> Efficiency
+                </div>
+            </div>
+
+            <div class="metric-card secondary">
+                <div class="metric-header">
+                    <div class="metric-title">Recent Blocks (24h)</div>
+                    <div class="metric-icon secondary">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="recentBlocks24h">0</div>
+                <div class="metric-change neutral" id="recentBlocksChange">
+                    <i class="fas fa-history"></i> Last 24 hours
+                </div>
+            </div>
+        </div>
+
+        <!-- Blocked IPs Table -->
+        <div class="data-table">
+            <div class="table-header">
+                <div class="table-title">Blocked IP Addresses</div>
+                <div class="table-subtitle">Currently blocked IP addresses and their details</div>
+                <div class="table-actions">
+                    <button class="btn btn-primary btn-sm" onclick="refreshBlockedIps()">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                    <button class="btn btn-success btn-sm" onclick="showBlockIpModal()">
+                        <i class="fas fa-plus"></i> Block IP
+                    </button>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>IP Address</th>
+                            <th>Blocked At</th>
+                            <th>Reason</th>
+                            <th>Threat Level</th>
+                            <th>Attack Type</th>
+                            <th>Auto Blocked</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="blockedIpsTable">
+                        <tr>
+                            <td colspan="7" class="text-center">Loading blocked IPs...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Block IP Modal -->
+        <div class="modal fade" id="blockIpModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Block IP Address</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="blockIpForm">
+                            <div class="mb-3">
+                                <label for="blockIpAddress" class="form-label">IP Address</label>
+                                <input type="text" class="form-control" id="blockIpAddress" placeholder="192.168.1.100" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="blockReason" class="form-label">Reason</label>
+                                <input type="text" class="form-control" id="blockReason" placeholder="Manual block - suspicious activity" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="blockThreatLevel" class="form-label">Threat Level</label>
+                                <input type="number" class="form-control" id="blockThreatLevel" min="0" max="1" step="0.1" value="0.5">
+                            </div>
+                            <div class="mb-3">
+                                <label for="blockAttackType" class="form-label">Attack Type</label>
+                                <select class="form-control" id="blockAttackType">
+                                    <option value="Manual">Manual</option>
+                                    <option value="HTTP Flood">HTTP Flood</option>
+                                    <option value="SYN Flood">SYN Flood</option>
+                                    <option value="UDP Flood">UDP Flood</option>
+                                    <option value="ICMP Flood">ICMP Flood</option>
+                                    <option value="Bot Activity">Bot Activity</option>
+                                    <option value="Volumetric Attack">Volumetric Attack</option>
+                                </select>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-danger" onclick="blockIp()">Block IP</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Charts Section -->
         <div class="charts-grid">
             <div class="chart-container">
@@ -974,6 +1135,14 @@
             
             // Update source IPs table
             updateSourceIpsTable(data.attack_statistics?.top_source_ips || {});
+            
+            // Update IP blocking statistics
+            updateBlockingStatistics(data);
+            
+            // Update blocked IPs table
+            if (data.blocked_ips) {
+                updateBlockedIpsTable(data.blocked_ips);
+            }
         }
         
         // Update status indicators
@@ -1088,10 +1257,138 @@
             });
         }
         
+        // IP Blocking Functions
+        function updateBlockingStatistics(data) {
+            if (data.blocking_statistics) {
+                const stats = data.blocking_statistics;
+                document.getElementById('totalBlockedIps').textContent = stats.total_blocked || 0;
+                document.getElementById('autoBlockedIps').textContent = stats.auto_blocked || 0;
+                document.getElementById('manualBlockedIps').textContent = stats.manual_blocked || 0;
+                document.getElementById('unblockedIps').textContent = stats.unblocked || 0;
+                document.getElementById('blockingRate').textContent = (stats.blocking_rate || 0).toFixed(1) + '%';
+                document.getElementById('recentBlocks24h').textContent = stats.recent_blocks_24h || 0;
+            }
+        }
+
+        function updateBlockedIpsTable(blockedIps) {
+            const tbody = document.getElementById('blockedIpsTable');
+            tbody.innerHTML = '';
+            
+            if (!blockedIps || blockedIps.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center">No blocked IPs</td></tr>';
+                return;
+            }
+            
+            blockedIps.forEach(ip => {
+                const row = document.createElement('tr');
+                const blockedAt = new Date(ip.blocked_at).toLocaleString();
+                const threatLevel = (ip.threat_level * 100).toFixed(1) + '%';
+                const autoBlocked = ip.auto_blocked ? 'Yes' : 'No';
+                const autoBlockedClass = ip.auto_blocked ? 'badge-warning' : 'badge-info';
+                
+                row.innerHTML = `
+                    <td><code>${ip.ip}</code></td>
+                    <td>${blockedAt}</td>
+                    <td>${ip.reason}</td>
+                    <td><span class="badge badge-danger">${threatLevel}</span></td>
+                    <td><span class="badge badge-secondary">${ip.attack_type}</span></td>
+                    <td><span class="badge ${autoBlockedClass}">${autoBlocked}</span></td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-danger" onclick="unblockIp('${ip.ip}')">
+                            <i class="fas fa-unlock"></i> Unblock
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function showBlockIpModal() {
+            const modal = new bootstrap.Modal(document.getElementById('blockIpModal'));
+            modal.show();
+        }
+
+        async function blockIp() {
+            const ip = document.getElementById('blockIpAddress').value;
+            const reason = document.getElementById('blockReason').value;
+            const threatLevel = parseFloat(document.getElementById('blockThreatLevel').value);
+            const attackType = document.getElementById('blockAttackType').value;
+            
+            if (!ip || !reason) {
+                alert('Please fill in all required fields');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/blocking/block', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        ip: ip,
+                        reason: reason,
+                        threat_level: threatLevel,
+                        attack_type: attackType
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    alert('IP blocked successfully');
+                    bootstrap.Modal.getInstance(document.getElementById('blockIpModal')).hide();
+                    refreshBlockedIps();
+                } else {
+                    alert('Error blocking IP: ' + result.message);
+                }
+            } catch (error) {
+                alert('Error blocking IP: ' + error.message);
+            }
+        }
+
+        async function unblockIp(ip) {
+            if (!confirm(`Are you sure you want to unblock IP ${ip}?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/blocking/unblock', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ ip: ip })
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    alert('IP unblocked successfully');
+                    refreshBlockedIps();
+                } else {
+                    alert('Error unblocking IP: ' + result.message);
+                }
+            } catch (error) {
+                alert('Error unblocking IP: ' + error.message);
+            }
+        }
+
+        async function refreshBlockedIps() {
+            try {
+                const response = await fetch('/api/blocking/ips');
+                const data = await response.json();
+                updateBlockedIpsTable(data);
+            } catch (error) {
+                console.error('Error fetching blocked IPs:', error);
+            }
+        }
+
         // Initialize dashboard
         document.addEventListener('DOMContentLoaded', function() {
             initializeCharts();
             connectWebSocket();
+            refreshBlockedIps(); // Load blocked IPs on startup
         });
     </script>
 </body>

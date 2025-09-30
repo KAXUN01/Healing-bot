@@ -9,6 +9,7 @@ from collections import defaultdict
 import logging
 from lightweight_cache import cache, set_cache, get_cache, delete_cache, cache_exists
 from lightweight_storage import storage, index_document, search_documents, get_document, delete_document
+from ip_blocker import ip_blocker
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -47,6 +48,19 @@ class ConnectionManager:
     def analyze_attack_pattern(self, ip: str, request_data: dict) -> dict:
         current_time = time.time()
         
+        # Check if IP is already blocked
+        if ip_blocker.is_ip_blocked(ip):
+            return {
+                'ip': ip,
+                'blocked': True,
+                'reason': 'IP is currently blocked',
+                'request_count': 0,
+                'duration': 0,
+                'pattern_detected': False,
+                'attack_type': None,
+                'confidence': 0.0
+            }
+        
         # Track IP behavior
         if ip not in self.ip_tracking:
             self.ip_tracking[ip] = {
@@ -75,7 +89,9 @@ class ConnectionManager:
             'duration': current_time - track['first_seen'],
             'pattern_detected': False,
             'attack_type': None,
-            'confidence': 0.0
+            'confidence': 0.0,
+            'threat_level': 0.0,
+            'blocked': False
         }
 
         if len(track['requests']) > 10:  # Minimum requests for pattern analysis
@@ -89,16 +105,28 @@ class ConnectionManager:
                 analysis['pattern_detected'] = True
                 analysis['attack_type'] = 'HTTP Flood'
                 analysis['confidence'] = min(req_per_second / 200, 1.0)
+                analysis['threat_level'] = min(req_per_second / 200, 1.0)
             
             elif std_interval < 0.1 and len(track['requests']) > 50:  # Very regular intervals
                 analysis['pattern_detected'] = True
                 analysis['attack_type'] = 'Bot Activity'
                 analysis['confidence'] = 0.8
+                analysis['threat_level'] = 0.8
             
             elif avg_bytes > 1000000:  # Large payload attacks
                 analysis['pattern_detected'] = True
                 analysis['attack_type'] = 'Volumetric Attack'
                 analysis['confidence'] = min(avg_bytes / 2000000, 1.0)
+                analysis['threat_level'] = min(avg_bytes / 2000000, 1.0)
+
+        # Auto-block if threat level is high
+        if analysis['pattern_detected'] and analysis['threat_level'] > 0:
+            if ip_blocker.should_auto_block(ip, analysis['threat_level'], analysis['attack_type']):
+                block_reason = f"High threat level ({analysis['threat_level']:.2f}) - {analysis['attack_type']}"
+                if ip_blocker.block_ip(ip, block_reason, analysis['threat_level'], analysis['attack_type']):
+                    analysis['blocked'] = True
+                    analysis['block_reason'] = block_reason
+                    logger.warning(f"Auto-blocked IP {ip} due to high threat level: {analysis['threat_level']:.2f}")
 
         return analysis
 
@@ -246,6 +274,79 @@ async def get_active_threats():
     except Exception as e:
         logger.error(f"Error getting active threats: {e}")
         return {"threats": []}
+
+@app.get("/blocked-ips")
+async def get_blocked_ips():
+    """Get list of blocked IPs"""
+    try:
+        blocked_ips = ip_blocker.get_blocked_ips(active_only=True)
+        return {"blocked_ips": blocked_ips}
+    except Exception as e:
+        logger.error(f"Error getting blocked IPs: {e}")
+        return {"blocked_ips": []}
+
+@app.get("/blocked-ips/stats")
+async def get_blocking_statistics():
+    """Get IP blocking statistics"""
+    try:
+        stats = ip_blocker.get_blocking_statistics()
+        return {"statistics": stats}
+    except Exception as e:
+        logger.error(f"Error getting blocking statistics: {e}")
+        return {"statistics": {}}
+
+@app.post("/block-ip")
+async def block_ip_endpoint(request: dict):
+    """Manually block an IP address"""
+    try:
+        ip = request.get('ip')
+        reason = request.get('reason', 'Manual block')
+        threat_level = request.get('threat_level', 0.0)
+        attack_type = request.get('attack_type', 'Manual')
+        
+        if not ip:
+            return {"error": "IP address is required"}
+        
+        success = ip_blocker.block_ip(ip, reason, threat_level, attack_type, auto_blocked=False)
+        
+        if success:
+            return {"status": "success", "message": f"IP {ip} blocked successfully"}
+        else:
+            return {"status": "error", "message": f"Failed to block IP {ip}"}
+            
+    except Exception as e:
+        logger.error(f"Error blocking IP: {e}")
+        return {"status": "error", "message": str(e)}
+
+@app.post("/unblock-ip")
+async def unblock_ip_endpoint(request: dict):
+    """Unblock an IP address"""
+    try:
+        ip = request.get('ip')
+        
+        if not ip:
+            return {"error": "IP address is required"}
+        
+        success = ip_blocker.unblock_ip(ip)
+        
+        if success:
+            return {"status": "success", "message": f"IP {ip} unblocked successfully"}
+        else:
+            return {"status": "error", "message": f"Failed to unblock IP {ip} or IP not found"}
+            
+    except Exception as e:
+        logger.error(f"Error unblocking IP: {e}")
+        return {"status": "error", "message": str(e)}
+
+@app.get("/is-blocked/{ip}")
+async def check_ip_blocked(ip: str):
+    """Check if an IP is blocked"""
+    try:
+        is_blocked = ip_blocker.is_ip_blocked(ip)
+        return {"ip": ip, "blocked": is_blocked}
+    except Exception as e:
+        logger.error(f"Error checking IP block status: {e}")
+        return {"ip": ip, "blocked": False, "error": str(e)}
 
 if __name__ == "__main__":
     import uvicorn
