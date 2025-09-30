@@ -30,9 +30,29 @@ A comprehensive cybersecurity system that automatically detects DDoS attacks, bl
 
 ## 🚀 Quick Start
 
+### 🎯 **NEW: Unified Launcher (Recommended)**
+
+**Single Command to Run Everything:**
+
+**Windows:**
+```cmd
+start-healing-bot.bat
+```
+
+**Linux/Mac:**
+```bash
+./start-healing-bot.sh
+```
+
+**Direct Python:**
+```bash
+python run-healing-bot.py
+```
+
 ### Prerequisites
 - Python 3.8 or higher
 - pip (Python package manager)
+- Docker (optional, for containerized deployment)
 
 ### Installation
 
@@ -42,21 +62,20 @@ A comprehensive cybersecurity system that automatically detects DDoS attacks, bl
    cd Healing-bot
    ```
 
-2. **Run the setup script:**
+2. **Quick Start (NEW):**
    ```bash
-   python setup.py
+   # Auto-detect and start everything
+   python run-healing-bot.py
    ```
 
-3. **Start the system:**
-   
-   **Windows:**
-   ```cmd
-   start-dev.bat
-   ```
-   
-   **Linux/Mac:**
+3. **Traditional Setup:**
    ```bash
-   ./start-dev.sh
+   # Run setup script
+   python setup.py
+   
+   # Start with individual scripts
+   # Windows: start-dev.bat
+   # Linux/Mac: ./start-dev.sh
    ```
 
 ### 🌐 Access Points
@@ -67,6 +86,40 @@ Once running, access the system at:
 - **🤖 Model API**: http://localhost:8080
 - **🔍 Network Analyzer**: http://localhost:8000
 - **🚨 Incident Bot**: http://localhost:8000
+- **📈 Monitoring Server**: http://localhost:5000
+- **📊 Prometheus**: http://localhost:9090 (Docker mode)
+- **📈 Grafana**: http://localhost:3000 (Docker mode)
+
+### 🎛️ **Unified Launcher Features**
+
+The new unified launcher (`run-healing-bot.py`) provides:
+
+- **🎯 Single Command**: Run entire system with one command
+- **🐳 Docker Support**: Full containerized deployment
+- **🐍 Native Python**: Direct execution for development
+- **🤖 Auto-Detection**: Automatically chooses best execution method
+- **🔧 Smart Setup**: Automatic dependency installation and configuration
+- **📊 Health Monitoring**: Waits for services to become healthy
+- **🛑 Graceful Shutdown**: Clean shutdown of all services
+- **🌐 Cross-Platform**: Works on Windows, Linux, and macOS
+
+**Usage Examples:**
+```bash
+# Auto-detect and start everything
+python run-healing-bot.py
+
+# Force Docker execution
+python run-healing-bot.py --mode docker
+
+# Force native Python execution  
+python run-healing-bot.py --mode native
+
+# Start specific services
+python run-healing-bot.py --services model dashboard
+
+# Setup only (don't start services)
+python run-healing-bot.py --setup-only
+```
 
 ## 🏗️ System Architecture
 
