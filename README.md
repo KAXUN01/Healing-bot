@@ -99,9 +99,11 @@ The new unified launcher (`run-healing-bot.py`) provides:
 - **🐍 Native Python**: Direct execution for development
 - **🤖 Auto-Detection**: Automatically chooses best execution method
 - **🔧 Smart Setup**: Automatic dependency installation and configuration
+- **🛠️ Auto-Fix**: Automatically fixes missing dependencies and retries failed services
 - **📊 Health Monitoring**: Waits for services to become healthy
 - **🛑 Graceful Shutdown**: Clean shutdown of all services
 - **🌐 Cross-Platform**: Works on Windows, Linux, and macOS
+- **🚀 Zero-Config**: No separate setup scripts needed
 
 **Usage Examples:**
 ```bash

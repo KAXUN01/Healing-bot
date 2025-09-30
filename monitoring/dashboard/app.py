@@ -18,6 +18,7 @@ import threading
 from collections import deque, defaultdict
 import sqlite3
 import os
+import geoip2.database
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -27,6 +28,14 @@ app = FastAPI(title="ML Model Performance Dashboard")
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Initialize GeoIP database (optional)
+try:
+    geoip_reader = geoip2.database.Reader('GeoLite2-City.mmdb')
+    logger.info("GeoIP database loaded successfully")
+except FileNotFoundError:
+    geoip_reader = None
+    logger.warning("GeoLite2-City.mmdb not found. GeoIP functionality will be disabled.")
 
 # Global variables for real-time data
 connected_clients: List[WebSocket] = []
@@ -57,7 +66,10 @@ attack_stats = {
     'false_negatives': 0,
     'attack_types': defaultdict(int),
     'top_source_ips': defaultdict(int),
-    'hourly_attacks': defaultdict(int)
+    'hourly_attacks': defaultdict(int),
+    'geographic_data': defaultdict(lambda: {'count': 0, 'country': 'Unknown', 'city': 'Unknown', 'latitude': 0, 'longitude': 0}),
+    'country_attacks': defaultdict(int),
+    'city_attacks': defaultdict(int)
 }
 
 # IP blocking statistics
@@ -70,6 +82,32 @@ blocking_stats = {
     'recent_blocks_24h': 0,
     'blocking_rate': 0.0
 }
+
+def get_ip_location(ip: str) -> dict:
+    """Get geographic location of an IP address"""
+    if geoip_reader is None:
+        return {
+            'country': 'Unknown',
+            'city': 'Unknown',
+            'latitude': 0,
+            'longitude': 0
+        }
+    
+    try:
+        response = geoip_reader.city(ip)
+        return {
+            'country': response.country.name or 'Unknown',
+            'city': response.city.name or 'Unknown',
+            'latitude': response.location.latitude or 0,
+            'longitude': response.location.longitude or 0
+        }
+    except:
+        return {
+            'country': 'Unknown',
+            'city': 'Unknown',
+            'latitude': 0,
+            'longitude': 0
+        }
 
 class MLModelMonitor:
     """Monitor ML model performance and collect metrics"""
@@ -143,6 +181,18 @@ class MLModelMonitor:
             # Simulate source IP
             source_ip = f"192.168.{np.random.randint(1, 255)}.{np.random.randint(1, 255)}"
             attack_stats['top_source_ips'][source_ip] += 1
+            
+            # Get geographic data for the source IP
+            geo_data = get_ip_location(source_ip)
+            attack_stats['geographic_data'][source_ip] = {
+                'count': attack_stats['geographic_data'][source_ip]['count'] + 1,
+                'country': geo_data['country'],
+                'city': geo_data['city'],
+                'latitude': geo_data['latitude'],
+                'longitude': geo_data['longitude']
+            }
+            attack_stats['country_attacks'][geo_data['country']] += 1
+            attack_stats['city_attacks'][geo_data['city']] += 1
         
         return {
             'total_detections': attack_stats['total_detections'],
@@ -152,7 +202,10 @@ class MLModelMonitor:
             'attack_types': dict(attack_stats['attack_types']),
             'top_source_ips': dict(list(attack_stats['top_source_ips'].items())[:10]),
             'hourly_attacks': dict(attack_stats['hourly_attacks']),
-            'detection_rate': attack_stats['total_detections'] / max(1, self.prediction_count) * 100
+            'detection_rate': attack_stats['total_detections'] / max(1, self.prediction_count) * 100,
+            'geographic_data': dict(attack_stats['geographic_data']),
+            'country_attacks': dict(attack_stats['country_attacks']),
+            'city_attacks': dict(attack_stats['city_attacks'])
         }
     
     async def get_blocking_statistics(self) -> Dict[str, Any]:

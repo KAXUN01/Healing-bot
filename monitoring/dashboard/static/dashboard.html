@@ -369,6 +369,118 @@
             color: #1e40af;
         }
 
+        /* Geographic Intelligence Styles */
+        .geographic-section {
+            margin: 2rem 0;
+            background: white;
+            border-radius: 0.75rem;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+
+        .section-header {
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--border-color);
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+        }
+
+        .section-header h3 {
+            margin: 0 0 0.5rem 0;
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--dark-color);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .section-header p {
+            margin: 0;
+            color: var(--secondary-color);
+            font-size: 0.875rem;
+        }
+
+        .geographic-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            padding: 1.5rem 2rem;
+        }
+
+        .geographic-card {
+            background: #f8fafc;
+            border-radius: 0.5rem;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+
+        .card-header {
+            padding: 1rem 1.5rem;
+            background: white;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .card-header h4 {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--dark-color);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .country-list, .city-list, .ip-locations {
+            padding: 1rem 1.5rem;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .country-item, .city-item, .ip-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .country-item:last-child, .city-item:last-child, .ip-item:last-child {
+            border-bottom: none;
+        }
+
+        .location-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .location-name {
+            font-weight: 500;
+            color: var(--dark-color);
+        }
+
+        .location-coords {
+            font-size: 0.75rem;
+            color: var(--secondary-color);
+        }
+
+        .attack-count {
+            background: var(--danger-color);
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .no-data {
+            text-align: center;
+            color: var(--secondary-color);
+            font-style: italic;
+            padding: 2rem 0;
+        }
+
         @media (max-width: 768px) {
             .dashboard-container {
                 padding: 1rem;
@@ -388,6 +500,11 @@
             
             .charts-grid {
                 grid-template-columns: 1fr;
+            }
+            
+            .geographic-grid {
+                grid-template-columns: 1fr;
+                padding: 1rem;
             }
             
             .status-bar {
@@ -879,6 +996,43 @@
             </div>
         </div>
 
+        <!-- Geographic Intelligence Section -->
+        <div class="geographic-section">
+            <div class="section-header">
+                <h3><i class="fas fa-globe-americas"></i> Geographic Threat Intelligence</h3>
+                <p>Attack sources and geographic distribution analysis</p>
+            </div>
+            
+            <div class="geographic-grid">
+                <div class="geographic-card">
+                    <div class="card-header">
+                        <h4><i class="fas fa-map-marked-alt"></i> Attack Sources by Country</h4>
+                    </div>
+                    <div class="country-list" id="countryAttacks">
+                        <div class="no-data">No geographic data available</div>
+                    </div>
+                </div>
+                
+                <div class="geographic-card">
+                    <div class="card-header">
+                        <h4><i class="fas fa-city"></i> Attack Sources by City</h4>
+                    </div>
+                    <div class="city-list" id="cityAttacks">
+                        <div class="no-data">No geographic data available</div>
+                    </div>
+                </div>
+                
+                <div class="geographic-card">
+                    <div class="card-header">
+                        <h4><i class="fas fa-map-pin"></i> Source IP Locations</h4>
+                    </div>
+                    <div class="ip-locations" id="ipLocations">
+                        <div class="no-data">No IP location data available</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Data Tables -->
         <div class="data-table">
             <div class="table-header">
@@ -1136,6 +1290,9 @@
             // Update source IPs table
             updateSourceIpsTable(data.attack_statistics?.top_source_ips || {});
             
+            // Update geographic data
+            updateGeographicData(data.attack_statistics);
+            
             // Update IP blocking statistics
             updateBlockingStatistics(data);
             
@@ -1254,6 +1411,102 @@
                     <td><span class="badge ${statusClass}">${statusText}</span></td>
                 `;
                 tbody.appendChild(row);
+            });
+        }
+        
+        // Update geographic data
+        function updateGeographicData(attackStats) {
+            if (!attackStats) return;
+            
+            // Update country attacks
+            updateCountryAttacks(attackStats.country_attacks || {});
+            
+            // Update city attacks
+            updateCityAttacks(attackStats.city_attacks || {});
+            
+            // Update IP locations
+            updateIpLocations(attackStats.geographic_data || {});
+        }
+        
+        function updateCountryAttacks(countryAttacks) {
+            const container = document.getElementById('countryAttacks');
+            container.innerHTML = '';
+            
+            if (Object.keys(countryAttacks).length === 0) {
+                container.innerHTML = '<div class="no-data">No country data available</div>';
+                return;
+            }
+            
+            const sortedCountries = Object.entries(countryAttacks)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+            
+            sortedCountries.forEach(([country, count]) => {
+                const item = document.createElement('div');
+                item.className = 'country-item';
+                item.innerHTML = `
+                    <div class="location-info">
+                        <div class="location-name">${country}</div>
+                    </div>
+                    <div class="attack-count">${count}</div>
+                `;
+                container.appendChild(item);
+            });
+        }
+        
+        function updateCityAttacks(cityAttacks) {
+            const container = document.getElementById('cityAttacks');
+            container.innerHTML = '';
+            
+            if (Object.keys(cityAttacks).length === 0) {
+                container.innerHTML = '<div class="no-data">No city data available</div>';
+                return;
+            }
+            
+            const sortedCities = Object.entries(cityAttacks)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+            
+            sortedCities.forEach(([city, count]) => {
+                const item = document.createElement('div');
+                item.className = 'city-item';
+                item.innerHTML = `
+                    <div class="location-info">
+                        <div class="location-name">${city}</div>
+                    </div>
+                    <div class="attack-count">${count}</div>
+                `;
+                container.appendChild(item);
+            });
+        }
+        
+        function updateIpLocations(geographicData) {
+            const container = document.getElementById('ipLocations');
+            container.innerHTML = '';
+            
+            if (Object.keys(geographicData).length === 0) {
+                container.innerHTML = '<div class="no-data">No IP location data available</div>';
+                return;
+            }
+            
+            const sortedIps = Object.entries(geographicData)
+                .sort((a, b) => b[1].count - a[1].count)
+                .slice(0, 10);
+            
+            sortedIps.forEach(([ip, data]) => {
+                const item = document.createElement('div');
+                item.className = 'ip-item';
+                const coords = data.latitude !== 0 && data.longitude !== 0 
+                    ? `${data.latitude.toFixed(2)}, ${data.longitude.toFixed(2)}`
+                    : 'Unknown';
+                item.innerHTML = `
+                    <div class="location-info">
+                        <div class="location-name">${ip}</div>
+                        <div class="location-coords">${data.city}, ${data.country} (${coords})</div>
+                    </div>
+                    <div class="attack-count">${data.count}</div>
+                `;
+                container.appendChild(item);
             });
         }
         

@@ -135,27 +135,89 @@ class HealingBotLauncher:
                 dst.write(src.read())
             print("✅ Created .env file - please configure your API keys")
         
-        # Install Python dependencies if not using Docker
-        if not self.docker_available:
-            print("📦 Installing Python dependencies...")
+        # Check for GeoLite2 database
+        geoip_db = self.project_root / "GeoLite2-City.mmdb"
+        if not geoip_db.exists():
+            print("🌍 GeoLite2 database not found - geographic features will be limited")
+            print("   Run 'python download-geoip-db.py' to set up geographic intelligence")
+        
+        # Install critical dependencies first
+        print("📦 Installing critical dependencies...")
+        critical_deps = [
+            "fastapi>=0.104.1", "uvicorn>=0.24.0", "flask>=3.0.0", "flask-bootstrap>=5.3.2.1",
+            "requests>=2.31.0", "numpy>=1.24.3", "pandas>=2.0.3", "scikit-learn>=1.3.0",
+            "tensorflow>=2.13.0", "matplotlib>=3.7.2", "seaborn>=0.12.2", "psutil>=5.9.6",
+            "prometheus-client>=0.19.0", "websockets>=12.0", "geoip2>=4.7.0",
+            "python-multipart>=0.0.6", "jinja2>=3.1.2", "markupsafe>=2.1.3"
+        ]
+        
+        try:
+            print("🔧 Installing core dependencies...")
+            subprocess.run([sys.executable, "-m", "pip", "install"] + critical_deps, 
+                         check=True, cwd=self.project_root, capture_output=True)
+            print("✅ Core dependencies installed")
+        except subprocess.CalledProcessError as e:
+            print(f"⚠️  Warning: Some core dependencies may not have installed properly")
+        
+        # Install from requirements files
+        print("📦 Installing from requirements files...")
+        
+        # Install main requirements
+        main_req_file = self.project_root / "requirements.txt"
+        if main_req_file.exists():
             try:
-                # Install main requirements
-                subprocess.run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"], 
-                             check=True, cwd=self.project_root)
+                subprocess.run([sys.executable, "-m", "pip", "install", "-r", str(main_req_file)], 
+                             check=True, cwd=self.project_root, capture_output=True)
+                print("✅ Main requirements installed")
+            except subprocess.CalledProcessError:
+                print("⚠️  Warning: Main requirements installation had issues")
+        
+        # Install component-specific requirements
+        for service_id, config in self.services.items():
+            req_file = self.project_root / config["path"] / "requirements.txt"
+            if req_file.exists():
+                try:
+                    subprocess.run([sys.executable, "-m", "pip", "install", "-r", str(req_file)], 
+                                 check=True, cwd=self.project_root, capture_output=True)
+                    print(f"✅ {config['name']} dependencies installed")
+                except subprocess.CalledProcessError:
+                    print(f"⚠️  Warning: {config['name']} dependencies had issues")
+        
+        # Final verification and fix any remaining issues
+        print("🔍 Final dependency verification...")
+        missing_deps = []
+        critical_modules = ["fastapi", "uvicorn", "flask", "requests", "numpy", "pandas", "tensorflow"]
+        
+        for module in critical_modules:
+            try:
+                __import__(module)
+            except ImportError:
+                missing_deps.append(module)
+        
+        if missing_deps:
+            print(f"🔧 Installing remaining missing dependencies: {', '.join(missing_deps)}")
+            try:
+                # Try installing with specific versions
+                fallback_deps = {
+                    "fastapi": "fastapi==0.104.1",
+                    "uvicorn": "uvicorn==0.24.0", 
+                    "flask": "flask==3.0.0",
+                    "requests": "requests==2.31.0",
+                    "numpy": "numpy==1.24.3",
+                    "pandas": "pandas==2.0.3",
+                    "tensorflow": "tensorflow==2.13.0"
+                }
                 
-                # Install component-specific requirements
-                for service_id, config in self.services.items():
-                    req_file = self.project_root / config["path"] / "requirements.txt"
-                    if req_file.exists():
-                        print(f"📦 Installing {config['name']} dependencies...")
-                        subprocess.run([sys.executable, "-m", "pip", "install", "-r", str(req_file)], 
-                                     check=True, cwd=self.project_root)
-                
-                print("✅ Dependencies installed successfully")
+                install_deps = [fallback_deps.get(dep, dep) for dep in missing_deps]
+                subprocess.run([sys.executable, "-m", "pip", "install"] + install_deps, 
+                             check=True, cwd=self.project_root, capture_output=True)
+                print("✅ Missing dependencies installed successfully")
             except subprocess.CalledProcessError as e:
-                print(f"❌ Failed to install dependencies: {e}")
+                print(f"❌ Critical error: Could not install required dependencies")
+                print(f"   Please run manually: pip install {' '.join(missing_deps)}")
                 return False
         
+        print("✅ All dependencies verified and ready")
         return True
 
     def check_ports(self) -> bool:
@@ -224,16 +286,69 @@ class HealingBotLauncher:
                     process = subprocess.Popen(
                         [sys.executable, str(script_path)],
                         cwd=service_path,
-                        creationflags=subprocess.CREATE_NEW_CONSOLE
+                        creationflags=subprocess.CREATE_NEW_CONSOLE,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE
                     )
                 else:
                     process = subprocess.Popen(
                         [sys.executable, str(script_path)],
-                        cwd=service_path
+                        cwd=service_path,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE
                     )
                 
-                self.processes.append((service_id, process))
-                print(f"✅ {config['name']} started (PID: {process.pid})")
+                # Give the process a moment to start and check for immediate errors
+                time.sleep(3)
+                
+                # Check if process is still running
+                if process.poll() is None:
+                    self.processes.append((service_id, process))
+                    print(f"✅ {config['name']} started (PID: {process.pid})")
+                else:
+                    # Process exited immediately, likely due to missing dependencies
+                    stdout, stderr = process.communicate()
+                    print(f"❌ {config['name']} failed to start")
+                    if stderr:
+                        error_msg = stderr.decode('utf-8', errors='ignore')
+                        if "ModuleNotFoundError" in error_msg:
+                            print(f"   💡 Missing dependencies detected for {config['name']}")
+                            print(f"   🔧 Attempting to fix dependencies...")
+                            
+                            # Try to install missing dependencies for this service
+                            try:
+                                req_file = service_path / "requirements.txt"
+                                if req_file.exists():
+                                    subprocess.run([sys.executable, "-m", "pip", "install", "-r", str(req_file)], 
+                                                 check=True, cwd=service_path, capture_output=True)
+                                    print(f"   ✅ Dependencies installed for {config['name']}")
+                                    
+                                    # Try starting the service again
+                                    print(f"   🔄 Retrying {config['name']}...")
+                                    if self.is_windows:
+                                        retry_process = subprocess.Popen(
+                                            [sys.executable, str(script_path)],
+                                            cwd=service_path,
+                                            creationflags=subprocess.CREATE_NEW_CONSOLE
+                                        )
+                                    else:
+                                        retry_process = subprocess.Popen(
+                                            [sys.executable, str(script_path)],
+                                            cwd=service_path
+                                        )
+                                    
+                                    time.sleep(2)
+                                    if retry_process.poll() is None:
+                                        self.processes.append((service_id, retry_process))
+                                        print(f"   ✅ {config['name']} started successfully on retry")
+                                    else:
+                                        print(f"   ❌ {config['name']} still failing after dependency fix")
+                                else:
+                                    print(f"   ❌ No requirements.txt found for {config['name']}")
+                            except Exception as e:
+                                print(f"   ❌ Failed to fix dependencies for {config['name']}: {e}")
+                        else:
+                            print(f"   Error: {error_msg[:200]}...")
                 
             except Exception as e:
                 print(f"❌ Failed to start {config['name']}: {e}")
